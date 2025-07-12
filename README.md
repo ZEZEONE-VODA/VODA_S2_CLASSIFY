@@ -45,3 +45,46 @@ python quick_vis.py
 ```
 
 **참고:** 각 스크립트는 추가적인 인자(argument)를 필요로 할 수 있습니다. 자세한 사용법은 각 `.py` 파일의 코드를 확인해주세요. (예: `python label.py --input_dir ./images`)
+
+## 4. Docker를 이용한 실행
+
+이 프로젝트는 Docker를 사용하여 간편하게 실행할 수 있습니다. Dockerfile은 ARM 아키텍처를 포함한 다양한 환경에서 실행될 수 있도록 설정되어 있습니다.
+
+### 4.1. Docker 이미지 빌드
+
+프로젝트 루트 디렉토리에서 다음 명령어를 실행하여 Docker 이미지를 빌드합니다.
+
+```bash
+# 'label-app'이라는 이름으로 이미지를 빌드합니다.
+docker build -t label-app .
+```
+
+### 4.2. Docker 컨테이너 실행
+
+빌드된 이미지를 사용하여 컨테이너를 실행합니다. 로컬 컴퓨터의 이미지 폴더와 출력 폴더를 컨테이너 내부의 폴더와 연결(마운트)해야 합니다.
+
+**Windows (CMD/PowerShell):**
+
+```bash
+docker run -v C:\path\to\your\images:/app/images -v C:\path\to\your\output:/app/output label-app --img_dir /app/images --dest_dir /app/output
+```
+
+**Linux/macOS 또는 Git Bash:**
+
+```bash
+docker run -v /path/to/your/images:/app/images -v /path/to/your/output:/app/output label-app --img_dir /app/images --dest_dir /app/output
+```
+
+**실행 예시 (Windows):**
+
+```bash
+docker run -v C:\Users\choho\Downloads\testimage\output2:/app/images -v C:\Users\choho\Downloads\testimage\ab_output:/app/output label-app --img_dir /app/images --dest_dir /app/output
+```
+
+**참고:**
+
+*   `C:\path\to\your\images` 와 `/path/to/your/images` 부분을 실제 이미지 파일이 있는 로컬 폴더 경로로 변경해야 합니다.
+*   `C:\path\to\your\output` 와 `/path/to/your/output` 부분을 결과물을 저장할 로컬 폴더 경로로 변경해야 합니다.
+*   ARM 기반 기기에서 실행하려면, 해당 기기에서 위와 동일한 방법으로 Docker 이미지를 빌드하고 컨테이너를 실행하면 됩니다. Dockerfile은 ARM 아키텍처를 자동으로 감지하여 빌드합니다.
+
+```

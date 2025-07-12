@@ -9,7 +9,7 @@ from label import detect_spots, fill_big_white
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--img", required=True)
-    ap.add_argument("--min_area", type=int, default=25)
+    ap.add_argument("--min_area", type=int, default=250)
     ap.add_argument("--max_area", type=int, default=400)
     ap.add_argument("--big_area", type=int, default=400)
     args = ap.parse_args()
