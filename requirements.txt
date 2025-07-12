@@ -1,0 +1,12 @@
+numpy
+opencv-python
+scikit-image
+scikit-learn
+matplotlib
+supervision
+inference-sdk
+pandas
+Pillow
+PyYAML
+tqdm
+typer
