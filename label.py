@@ -42,19 +42,16 @@ def has_green_circle(img_bgr, min_radius=50, max_radius=300, min_votes=30):
 # ────────────── 3) 큰 흰 덩어리 내부를 작은 초록 ●로 채우기 ──────────────
 def fill_big_white(
         img_bgr,
-        min_area=1_000,
-        max_area=20_000,
-        thresh_val=100,
-        dot_radius=5,
-        dot_step=14,
-        morph_ksize=9):
-    """큰 흰 덩어리를 작은 초록 ●로 채움 (보수적 버전)"""
+        min_area=1_000, max_area=20_000, thresh_val=100,
+        dot_radius=5, dot_step=14, morph_ksize=9,
+        return_pts=False):                 # ★ 추가
+
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     _, bin_ = cv2.threshold(gray, thresh_val, 255, cv2.THRESH_BINARY)
-
     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (morph_ksize, morph_ksize))
     bin_ = cv2.morphologyEx(bin_, cv2.MORPH_CLOSE, k)
 
+    filled = []                            # ★ 찍은 점을 담을 리스트
     cnts, _ = cv2.findContours(bin_, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in cnts:
         area = cv2.contourArea(c)
@@ -62,11 +59,19 @@ def fill_big_white(
             continue
         mask = np.zeros_like(gray, np.uint8)
         cv2.drawContours(mask, [c], -1, 255, -1)
+
         h, w = mask.shape
         for y in range(0, h, dot_step):
             for x in range(0, w, dot_step):
                 if mask[y, x]:
                     cv2.circle(img_bgr, (x, y), dot_radius, (0, 255, 0), -1)
+                    if return_pts:         # ★ 좌표 저장
+                        filled.append((x, y))
+
+    if return_pts:
+        return np.array(filled, np.float32)
+    # return None 생략 시 기본 None 반환
+
 
 # ────────────── 4) 지표 계산 함수들 ──────────────
 def nn_cv(pts):
@@ -108,30 +113,76 @@ def has_overlap(pts, min_gap=MIN_GAP):
 # ────────────── analyse() ──────────────
 def analyse(path: Path, args):
     img  = cv2.imread(str(path))
+    # 1) 원래 스팟 검출
     pts, _, _ = detect_spots(
-        img, args.min_area, args.max_area,
-        args.min_threshold, args.max_threshold)
+        img,
+        args.min_area, args.max_area,
+        args.min_threshold, args.max_threshold
+    )
 
-    overlap    = has_overlap(pts)
-    # ★ args.eps / args.min_samples 사용
-    max_clu_sz = cluster_max(pts, eps=args.eps, min_samples=args.min_samples)
-    uni_val    = grid_uniformity(pts, *img.shape[:2])
+    # 2) 시각화용 흰 덩어리 채우기 점까지 받아오기
+    vis = img.copy()
+    filled_pts = fill_big_white(vis, args.big_area, return_pts=True)
 
-    # ★ args.max_clu_thr 사용
+    # 3) pts + filled_pts 합치기
+    if filled_pts is not None and filled_pts.size:
+        all_pts = np.vstack([pts, filled_pts])
+    else:
+        all_pts = pts
+
+    # 4) overlap / cluster_max / uniformity 계산
+    overlap    = has_overlap(all_pts)
+    max_clu_sz = cluster_max(all_pts, eps=args.eps, min_samples=args.min_samples)
+    uni_val    = grid_uniformity(all_pts, *img.shape[:2])
+
+    # 5) 진단용 거리 지표
+    n_spots = len(all_pts)
+    if n_spots > 1:
+        dists = (
+            NearestNeighbors(n_neighbors=2)
+            .fit(all_pts)
+            .kneighbors(all_pts)[0][:, 1]
+        )
+        min_nn_dist = float(dists.min())
+        nn_cv_val   = float(dists.std() / dists.mean())
+    else:
+        min_nn_dist = float("nan")
+        nn_cv_val   = float("nan")
+
+    # 6) 클러스터 개수 계산 (빈 배열 또는 소수 클러스터 건너뜀)
+    if all_pts.ndim != 2 or all_pts.shape[0] < args.min_samples:
+        n_clusters = 0
+    else:
+        labels = DBSCAN(eps=args.eps, min_samples=args.min_samples) \
+                   .fit_predict(all_pts)
+        # -1 은 노이즈 레이블이므로 제외
+        n_clusters = int(len(set(labels)) - (1 if -1 in labels else 0))
+
+    # 7) A/B 판정
     label = "A" if (
-        not overlap
-        and max_clu_sz < args.max_clu_thr
+        max_clu_sz < args.max_clu_thr
         and uni_val    >= args.uni_thr
     ) else "B"
 
-    vis = img.copy()
-    fill_big_white(vis, args.big_area)
+    # 8) 시각화 : 원래 스팟만 그려 주기
     for x, y in pts.astype(int):
         cv2.circle(vis, (x, y), DOT_R, (0, 255, 0), -1)
 
-    return dict(
-        file=path.name, overlap=overlap, max_cluster=max_clu_sz,
-        uniformity=uni_val, label=label, vis=vis, path=path)
+    # 9) 결과 dict 반환 (CSV에 모든 컬럼으로)
+    return {
+        "file":         path.name,
+        "overlap":      overlap,
+        "max_cluster":  max_clu_sz,
+        "uniformity":   uni_val,
+        "n_spots":      n_spots,
+        "min_nn_dist":  min_nn_dist,
+        "nn_cv":        nn_cv_val,
+        "n_clusters":   n_clusters,
+        "label":        label,
+        "vis":          vis,
+        "path":         path
+    }
+
 
 # ────────────── main() ──────────────
 def main():
