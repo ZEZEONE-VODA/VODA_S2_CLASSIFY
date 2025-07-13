@@ -9,7 +9,7 @@ from label import detect_spots, fill_big_white
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--img", required=True)
-    ap.add_argument("--min_area", type=int, default=250)
+    ap.add_argument("--min_area", type=int, default=100)   # ← 기본값도 실제 면적 단위로
     ap.add_argument("--max_area", type=int, default=400)
     ap.add_argument("--big_area", type=int, default=400)
     args = ap.parse_args()
@@ -18,10 +18,17 @@ def main():
     if img is None:
         raise RuntimeError("이미지 불러오기 실패")
 
-    # 1) 카운트용: 원본 복사본으로 spot 검출
-    pts, _, _ = detect_spots(img.copy(), args.min_area, args.max_area)
+    # ── 1) spot 검출 ──────────────────────────────────────
+    # detect_spots 안에서는 sigma 로만 걸러지므로 면적 필터를 직접 적용
+    pts, _, _ = detect_spots(
+        img.copy(),
+        min_area=args.min_area,
+        max_area=args.max_area,
+        min_threshold=100,       # ← 필요 시 인자 추가
+        max_threshold=500
+    )
 
-    # 2) 시각화: 큰 덩어리 → 내부 초록 ● + 작은 spot ●
+    # ── 2) 시각화: 큰 덩어리 + 작은 spot 표식 ─────────────
     fill_big_white(img, args.big_area)
     for x, y in pts.astype(int):
         cv2.circle(img, (x, y), 5, (0, 255, 0), -1)

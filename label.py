@@ -44,7 +44,7 @@ def fill_big_white(
         img_bgr,
         min_area=1_000,        # 최소 면적(px²)
         max_area=20_000,       # 최대 면적(px²) ← NEW
-        thresh_val=180,        # 밝기 임계값 ↑ (100 → 180)
+        thresh_val=100,        # 밝기 임계값 ↑ (100 → 180)
         dot_radius=5,
         dot_step=14,
         morph_ksize=9):        # 모폴로지 커널 크기 ↓
