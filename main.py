@@ -63,6 +63,7 @@ def get_annot(fname: str):
 
 # ───────── 헬스 체크 ─────────
 @app.get("/health")
+@app.head("/health")
 def health():
     return {"status": "ok"}
 
