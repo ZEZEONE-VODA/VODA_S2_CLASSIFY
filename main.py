@@ -14,6 +14,7 @@ from pymongo import MongoClient
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
 
 from analyser import analyse_bgr  # 같은 폴더에 analyser.py 존재해야 함
 
@@ -38,6 +39,15 @@ app = FastAPI(
     description="하이퍼파라미터 전부 노출, MongoDB 자동 저장",
     version="1.2.5",
 )
+
+# ───────── CORS 설정 ─────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],       
+    allow_credentials=True,
+    allow_methods=["*"],        
+    allow_headers=["*"],  
+)        
 
 # ───────── 헬퍼 ─────────
 def _file_to_bgr(upload: UploadFile):
