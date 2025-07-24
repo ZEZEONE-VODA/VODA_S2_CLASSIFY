@@ -110,7 +110,7 @@ def classify(
         raise HTTPException(500, "annotated 이미지가 없습니다.")
     b64_png, png_buf = _bgr_to_png(annotated)
 
-    # 3) 파일 저장 → URL (request.url_for로 자동 생성)
+    # 3) 파일 저장 → URL 생성
     fname = f"{uuid4()}.png"
     (ANNOT_DIR / fname).write_bytes(png_buf.tobytes())
     img_url = str(request.url_for("get_annot", fname=fname))
