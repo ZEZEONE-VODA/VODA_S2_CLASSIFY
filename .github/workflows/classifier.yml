@@ -26,13 +26,18 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Normalize tag   # <- 선택
+        run: |
+          echo "IMAGE=$(echo '${{ secrets.DOCKER_IMAGENAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "IMAGE_SHA=$(echo '${{ secrets.DOCKER_IMAGENAME }}' | tr '[:upper:]' '[:lower:]'):${GITHUB_SHA::7}" >> $GITHUB_ENV
+
       - name: Build & Push image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_IMAGENAME }}
+          tags: ${{ env.IMAGE }},${{ env.IMAGE_SHA }}
 
       - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -44,11 +49,11 @@ jobs:
             mkdir -p ~/classifier-data/annot
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ~/classifier-data/classifier.env
 
-            docker pull ${{ secrets.DOCKER_IMAGENAME }}
+            docker pull ${{ env.IMAGE }}
             docker stop classifier || true
             docker rm classifier || true
             docker run -d --name classifier \
               --env-file ~/classifier-data/classifier.env \
               -v ~/classifier-data/annot:/app/static/annot \
               -p 8100:8000 \
-              ${{ secrets.DOCKER_IMAGENAME }}
+              ${{ env.IMAGE }}
