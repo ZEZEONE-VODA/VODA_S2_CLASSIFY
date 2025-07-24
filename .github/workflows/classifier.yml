@@ -44,7 +44,7 @@ jobs:
             mkdir -p ~/classifier-data/annot
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ~/classifier-data/classifier.env
 
-            docker pull ${{ secrets.DOCKER_IMAGENAME_CLASSIFIER }}
+            docker pull ${{ secrets.DOCKER_IMAGENAME }}
             docker stop classifier || true
             docker rm classifier || true
             docker run -d --name classifier \
