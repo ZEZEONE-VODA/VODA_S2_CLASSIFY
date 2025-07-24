@@ -32,7 +32,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_IMAGENAME_CLASSIFIER }}
+          tags: ${{ secrets.DOCKER_IMAGENAME }}
 
       - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -51,4 +51,4 @@ jobs:
               --env-file ~/classifier-data/classifier.env \
               -v ~/classifier-data/annot:/app/static/annot \
               -p 8100:8000 \
-              ${{ secrets.DOCKER_IMAGENAME_CLASSIFIER }}
+              ${{ secrets.DOCKER_IMAGENAME }}
