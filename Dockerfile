@@ -9,7 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 전체 코드 복사
-COPY . /app
+COPY . .
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
