@@ -45,9 +45,9 @@ jobs:
             docker stop classifier || true
             docker rm classifier || true
             docker run -d --name classifier \
-              --network backend_app-network \ 
+              --network backend_app-network \
               --env-file ~/classifier-data/classifier.env \
               -v ~/classifier-data/annot:/app/static/annot \
               -p 8100:8000 \
               docker.io/${{ secrets.DOCKER_USERNAME }}/classifier:latest
-
+              
