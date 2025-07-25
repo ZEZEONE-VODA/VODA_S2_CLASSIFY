@@ -35,8 +35,8 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}       # ← 실제 VM 계정
-          key: ${{ secrets.SERVER_SSH_KEY }}         # ← 새로 만든 private key
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             mkdir -p ~/classifier-data/annot
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ~/classifier-data/classifier.env
@@ -45,7 +45,9 @@ jobs:
             docker stop classifier || true
             docker rm classifier || true
             docker run -d --name classifier \
+              --network backend_app-network \ 
               --env-file ~/classifier-data/classifier.env \
               -v ~/classifier-data/annot:/app/static/annot \
               -p 8100:8000 \
               docker.io/${{ secrets.DOCKER_USERNAME }}/classifier:latest
+
