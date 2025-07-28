@@ -4,10 +4,12 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '**/*.py'
+      - '*.py'                 # 루트에 있는 .py
+      - '**/*.py'              # 하위 폴더 .py
       - 'requirements.txt'
       - 'Dockerfile'
-      - '.github/workflows/classifier.yml'
+      - '.github/workflows/**' # 워크플로우 수정도 트리거
+  workflow_dispatch:       
 
 jobs:
   build-and-deploy:
