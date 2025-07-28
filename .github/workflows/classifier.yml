@@ -4,12 +4,12 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '*.py'                 # 루트에 있는 .py
-      - '**/*.py'              # 하위 폴더 .py
+      - '*.py'
+      - '**/*.py'
       - 'requirements.txt'
       - 'Dockerfile'
-      - '.github/workflows/**' # 워크플로우 수정도 트리거
-  workflow_dispatch:       
+      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -40,14 +40,14 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            set -e
+            set -euo pipefail
 
             mkdir -p ~/classifier-data/keys
 
-            # JSON 원문을 그대로 파일로 저장
-            printf '%s' "${{ secrets.GCP_SA_JSON }}" > ~/classifier-data/keys/gcp.json
+            # Base64 로 넣어둔 서비스계정 키 복원
+            echo "${{ secrets.GCP_SA_JSON_B64 }}" | base64 -d > ~/classifier-data/keys/gcp.json
 
-            # env 파일 생성
+            # env 파일 생성 (heredoc 대신 중괄호 블록)
             {
               echo "MONGO_URI=${{ secrets.MONGO_URI }}";
               echo "GCS_BUCKET=zezeone_images";
@@ -55,11 +55,17 @@ jobs:
               echo "GOOGLE_APPLICATION_CREDENTIALS=/keys/gcp.json";
             } > ~/classifier-data/classifier.env
 
-            docker pull docker.io/${{ secrets.DOCKER_USERNAME }}/classifier:latest
+            # 네트워크 없으면 생성 (옵션)
+            docker network inspect backend_app-network >/dev/null 2>&1 || \
+              docker network create backend_app-network
+
+            docker pull docker.io/${{ secrets.DOCKER_USERNAME }}/classifier:latest || true
+
             docker stop classifier || true
-            docker rm classifier || true
+            docker rm   classifier || true
 
             docker run -d --name classifier \
+              --restart unless-stopped \
               --network backend_app-network \
               --env-file ~/classifier-data/classifier.env \
               -v ~/classifier-data/keys/gcp.json:/keys/gcp.json:ro \
