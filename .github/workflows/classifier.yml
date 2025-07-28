@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '**.py'
+      - '**/*.py'
       - 'requirements.txt'
       - 'Dockerfile'
       - '.github/workflows/classifier.yml'
@@ -38,16 +38,28 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            mkdir -p ~/classifier-data/annot
-            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ~/classifier-data/classifier.env
+            set -e
+
+            mkdir -p ~/classifier-data/keys
+
+            # JSON 원문을 그대로 파일로 저장
+            printf '%s' "${{ secrets.GCP_SA_JSON }}" > ~/classifier-data/keys/gcp.json
+
+            # env 파일 생성
+            {
+              echo "MONGO_URI=${{ secrets.MONGO_URI }}";
+              echo "GCS_BUCKET=zezeone_images";
+              echo "GCS_SUBDIR=grade";
+              echo "GOOGLE_APPLICATION_CREDENTIALS=/keys/gcp.json";
+            } > ~/classifier-data/classifier.env
 
             docker pull docker.io/${{ secrets.DOCKER_USERNAME }}/classifier:latest
             docker stop classifier || true
             docker rm classifier || true
+
             docker run -d --name classifier \
               --network backend_app-network \
               --env-file ~/classifier-data/classifier.env \
-              -v ~/classifier-data/annot:/app/static/annot \
+              -v ~/classifier-data/keys/gcp.json:/keys/gcp.json:ro \
               -p 8100:8000 \
               docker.io/${{ secrets.DOCKER_USERNAME }}/classifier:latest
-              

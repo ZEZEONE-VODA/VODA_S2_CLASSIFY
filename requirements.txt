@@ -7,3 +7,4 @@ opencv-python
 scikit-learn
 scipy
 python-multipart
+google-cloud-storage

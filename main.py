@@ -2,55 +2,64 @@
 /classify
   • return_type=json → JSON + annotated_png(Base64)
   • return_type=png  → image/png
-  • img_url          → 저장된 annotated 이미지 HTTP 링크
+  • img_url          → GCS에 저장된 annotated 이미지 공개 URL
   • MongoDB          → annotated_png·overlap 제외하고 저장
+  • date_time        → UTC 타임스탬프 (aware datetime)
+  • ts_ms            → epoch milliseconds (정렬/쿼리용)
 """
-import os, io, base64, cv2, numpy as np
+import os
+import io
+import base64
 from uuid import uuid4
-from pathlib import Path
+from datetime import datetime, timezone
 
+import cv2
+import numpy as np
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from google.cloud import storage
 
-from analyser import analyse_bgr  # 같은 폴더에 analyser.py 존재해야 함
+from analyser import analyse_bgr  # 사용자 보유 코드
 
-# ───────── 환경 변수 로드 ─────────
+# ───────── ENV ─────────
 load_dotenv()
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI   = os.getenv("MONGO_URI")
+GCS_BUCKET  = os.getenv("GCS_BUCKET", "zezeone_images")
+GCS_SUBDIR  = os.getenv("GCS_SUBDIR", "grade")
+
 if not MONGO_URI:
     raise RuntimeError("환경변수 MONGO_URI 가 설정되지 않았습니다.")
+if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS 가 설정되지 않았습니다.")
 
 # ───────── Mongo ─────────
-client    = MongoClient(MONGO_URI)
-mongo_col = client["zezeone"]["results"]
+mongo_col = MongoClient(MONGO_URI)["zezeone"]["results"]
 
-# ───────── 경로 ─────────
-BASE_DIR  = Path(__file__).resolve().parent
-ANNOT_DIR = (BASE_DIR / "static" / "annot").resolve()
-ANNOT_DIR.mkdir(parents=True, exist_ok=True)
+# ───────── GCS ─────────
+gcs_client = storage.Client()
+gcs_bucket = gcs_client.bucket(GCS_BUCKET)
 
 # ───────── FastAPI ─────────
 app = FastAPI(
-    title="Spot Classifier API (env + Mongo)",
-    description="하이퍼파라미터 전부 노출, MongoDB 자동 저장",
-    version="1.2.5",
+    title="Spot Classifier API (Mongo + GCS)",
+    description="하이퍼파라미터 노출, MongoDB 자동 저장, GCS 저장",
+    version="1.3.1",
 )
 
-# ───────── CORS 설정 ─────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],        
-    allow_headers=["*"],  
-)        
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ───────── 헬퍼 ─────────
-def _file_to_bgr(upload: UploadFile):
+# ───────── Helpers ─────────
+def _file_to_bgr(upload: UploadFile) -> np.ndarray:
     data = upload.file.read()
     img  = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
@@ -61,26 +70,25 @@ def _bgr_to_png(img: np.ndarray):
     ok, buf = cv2.imencode(".png", img)
     if not ok:
         raise RuntimeError("PNG 인코딩 실패")
-    return base64.b64encode(buf).decode(), buf
+    return base64.b64encode(buf).decode(), buf  # (b64 str, np.ndarray)
 
-# ───────── 이미지 제공 ─────────
-@app.get("/annot/{fname}", summary="저장된 annotated PNG 반환")
-def get_annot(fname: str):
-    fpath = ANNOT_DIR / fname
-    if not fpath.exists():
-        raise HTTPException(404, "이미지 없음")
-    return FileResponse(fpath, media_type="image/png")
+def upload_png_to_gcs(png_buf: np.ndarray) -> tuple[str, str]:
+    object_name = f"{GCS_SUBDIR}/{uuid4()}.png"
+    blob = gcs_bucket.blob(object_name)
+    blob.upload_from_string(png_buf.tobytes(), content_type="image/png")
+    public_url = f"https://storage.googleapis.com/{GCS_BUCKET}/{object_name}"
+    return object_name, public_url
 
-# ───────── 헬스 체크 ─────────
+# ───────── Health ─────────
 @app.get("/health")
 @app.head("/health")
 def health():
     return {"status": "ok"}
 
-# ───────── 메인 엔드포인트 ─────────
+# ───────── Main Endpoint ─────────
 @app.post(
     "/classify",
-    summary="A/B 분석 + MongoDB 저장",
+    summary="A/B 분석 + MongoDB 저장 + GCS 업로드",
     responses={200: {"content": {"application/json": {}, "image/png": {}}}},
 )
 def classify(
@@ -115,33 +123,47 @@ def classify(
         big_area=big_area,
     )
 
-    # 2) annotated PNG 처리
+    # 2) annotated PNG
     annotated = analysed.pop("annotated", None)
     if annotated is None:
         raise HTTPException(500, "annotated 이미지가 없습니다.")
     b64_png, png_buf = _bgr_to_png(annotated)
 
-    # 3) 파일 저장 → URL 생성
-    fname = f"{uuid4()}.png"
-    (ANNOT_DIR / fname).write_bytes(png_buf.tobytes())
-    img_url = str(request.url_for("get_annot", fname=fname))
+    # 3) GCS 업로드
+    img_file_id, img_url = upload_png_to_gcs(png_buf)
 
-    # 디버그 로그
-    print(">>> BASE_DIR :", BASE_DIR)
-    print(">>> ANNOT_DIR:", ANNOT_DIR)
-    print(">>> IMG_PATH :", (ANNOT_DIR / fname).resolve())
-    print(">>> IMG_URL  :", img_url)
+    # 4) Mongo 저장 (overlap, annotated_png 제외)
+    now_utc = datetime.now(timezone.utc)
+    ts_ms   = int(now_utc.timestamp() * 1000)
 
-    # 4) DB 저장 (overlap, annotated_png 제외)
-    mongo_doc = {k: v for k, v in analysed.items() if k != "overlap"}
-    mongo_doc["img_url"] = img_url
+    mongo_doc = {
+        "label":        analysed.get("label"),
+        "max_cluster":  analysed.get("max_cluster"),
+        "uniformity":   analysed.get("uniformity"),
+        "n_spots":      analysed.get("n_spots"),
+        "min_nn_dist":  analysed.get("min_nn_dist"),
+        "nn_cv":        analysed.get("nn_cv"),
+        "n_clusters":   analysed.get("n_clusters"),
+        "img_file_id":  img_file_id,
+        "img_url":      img_url,
+        "uploadDate":   now_utc,     # 기존 필드
+        "date_time":    now_utc,     # 요청 필드
+        "ts_ms":        ts_ms,       # 정수형 타임스탬프(옵션)
+    }
     inserted_id = mongo_col.insert_one(mongo_doc).inserted_id
 
     # 5) 응답
     if return_type == "png":
         return StreamingResponse(io.BytesIO(png_buf), media_type="image/png")
 
-    analysed["_id"]           = str(inserted_id)
-    analysed["annotated_png"] = b64_png
-    analysed["img_url"]       = img_url
-    return JSONResponse(jsonable_encoder(analysed))
+    analysed_resp = analysed.copy()
+    analysed_resp.update({
+        "_id":            str(inserted_id),
+        "annotated_png":  b64_png,
+        "img_url":        img_url,
+        "img_file_id":    img_file_id,
+        "date_time":      now_utc.isoformat(),
+        "ts_ms":          ts_ms,
+    })
+
+    return JSONResponse(jsonable_encoder(analysed_resp))
