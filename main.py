@@ -100,6 +100,9 @@ def classify(
     max_clu_thr: int = Query(15, ge=1),
     uni_thr: float   = Query(0.89, ge=0, le=1),
 
+    #원 반지름
+    dot_radius: int = Query(5, ge=1, le=50, description="점 반경(px)"),
+
     # BlobDetector
     min_area: int = Query(130, ge=1),
     max_area: int = Query(400, ge=1),
@@ -121,6 +124,7 @@ def classify(
         min_threshold=min_threshold, max_threshold=max_threshold,
         eps=eps, min_samples=min_samples,
         big_area=big_area,
+        dot_radius=dot_radius
     )
 
     # 2) annotated PNG

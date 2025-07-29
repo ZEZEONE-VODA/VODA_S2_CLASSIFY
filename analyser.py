@@ -125,8 +125,12 @@ def analyse_bgr(
     eps: float = 30.0,
     min_samples: int = 6,
     uni_thr: float = 0.89,
-    big_area: int = 200
+    big_area: int = 200,
+    dot_radius: int = 5
 ):
+        # ── 반경·간격을 런타임 계산 ─────────────────────
+    DOT_R   = dot_radius
+    MIN_GAP = DOT_R * 2 + 1
     pts, _, _ = detect_spots(img_bgr, min_area, max_area,
                              min_threshold, max_threshold)
 
@@ -136,7 +140,7 @@ def analyse_bgr(
         min_area=big_area,       # ← 꼭 키워드로!
         max_area=20_000,
         thresh_val=200,
-        dot_radius=5,
+        dot_radius=dot_radius,
         morph_ksize=9,
         return_pts=True
     )
@@ -160,7 +164,7 @@ def analyse_bgr(
     uniq_all = np.unique(all_pts.astype(int), axis=0)
     n_spots  = int(len(uniq_all))
 
-    overlap    = has_overlap(all_pts)
+    overlap = has_overlap(all_pts, min_gap=MIN_GAP)
     max_clu_sz = cluster_max(all_pts, eps=eps, min_samples=min_samples)
     uni_val    = grid_uniformity(all_pts, *img_bgr.shape[:2])
 
