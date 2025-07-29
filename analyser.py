@@ -14,7 +14,7 @@ DOT_R   = 5
 MIN_GAP = DOT_R * 2 + 1   # 11px 이하이면 overlap 간주
 
 # ───────── 1) spot 검출 ─────────
-def detect_spots(img_bgr, min_area=50, max_area=2000,
+def detect_spots(img_bgr, min_area=10, max_area=2000,
                  min_threshold=100, max_threshold=500):
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
@@ -30,8 +30,14 @@ def detect_spots(img_bgr, min_area=50, max_area=2000,
     return pts, area, gray / 255.0
 
 # ───────── 3) 큰 흰 덩어리 내부 채우기 ─────────
-def fill_big_white(img_bgr, min_area=100, max_area=20_000, thresh_val=200,
-                   dot_radius=5, dot_step=8, morph_ksize=9, return_pts=False):
+def fill_big_white(
+    img_bgr, min_area=10, max_area=20_000, thresh_val=200,
+    dot_radius=5, morph_ksize=9, return_pts=False
+):
+    # ---- 튜닝 파라미터(필요시 숫자만 바꿔 쓰세요) ----
+    AREA_PER_DOT = 100   # 면적당 점 1개 기준(작게 하면 더 많이 찍힘)
+    MIN_STEP     = dot_radius * 2  # 점 간격 최소치
+
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     _, bin_ = cv2.threshold(gray, thresh_val, 255, cv2.THRESH_BINARY)
 
@@ -45,20 +51,37 @@ def fill_big_white(img_bgr, min_area=100, max_area=20_000, thresh_val=200,
         if not (min_area <= area <= max_area):
             continue
 
+        # --- 면적 기반 점 개수 계산 ---
+        n_dots = max(1, int(area // AREA_PER_DOT))
+
+        # 마스크 생성
         mask = np.zeros_like(gray, np.uint8)
         cv2.drawContours(mask, [c], -1, 255, -1)
 
         x0, y0, w0, h0 = cv2.boundingRect(c)
-        offset = dot_step // 2
-        for y in range(y0 + offset, y0 + h0, dot_step):
-            for x in range(x0 + offset, x0 + w0, dot_step):
+
+        # 목표 개수에 맞춰 스텝 계산(대략적)
+        est_step = int(np.sqrt(area / n_dots))
+        step = max(MIN_STEP, est_step)
+
+        placed = 0
+        off = step // 2
+        for y in range(y0 + off, y0 + h0, step):
+            for x in range(x0 + off, x0 + w0, step):
                 if mask[y, x]:
                     cv2.circle(img_bgr, (x, y), dot_radius, (0, 255, 0), -1)
                     if return_pts:
                         filled.append((x, y))
+                    placed += 1
+                    if placed >= n_dots:  # 목표 개수 채우면 중단
+                        break
+            if placed >= n_dots:
+                break
 
     if return_pts:
+        filled = list(set(map(tuple, filled)))          # 좌표 중복 제거
         return np.array(filled, np.float32).reshape(-1, 2)
+
 
 # ───────── 유틸 지표 함수 ─────────
 def has_overlap(pts, min_gap=MIN_GAP):
@@ -95,7 +118,7 @@ def analyse_bgr(
     img_bgr,
     *,
     max_clu_thr: int = 15,
-    min_area: int = 100,
+    min_area: int = 10,
     max_area: int = 400,
     min_threshold: int = 100,
     max_threshold: int = 500,
@@ -108,8 +131,34 @@ def analyse_bgr(
                              min_threshold, max_threshold)
 
     vis = img_bgr.copy()
-    filled_pts = fill_big_white(vis, big_area, return_pts=True)
+    filled_pts = fill_big_white(
+        vis,
+        min_area=big_area,       # ← 꼭 키워드로!
+        max_area=20_000,
+        thresh_val=200,
+        dot_radius=5,
+        morph_ksize=9,
+        return_pts=True
+    )
+
+        # 2) 아직 안 그려진 blob 점도 그리기
+    drawn_set = set()  # (x,y) 정수 좌표 저장용
+    if filled_pts is not None and filled_pts.size:
+        for x, y in filled_pts.astype(int):
+            drawn_set.add((x, y))
+
+    for x, y in pts.astype(int):
+        if (x, y) not in drawn_set:                 # 중복 방지
+            cv2.circle(vis, (x, y), DOT_R, (0, 255, 0), -1)
+            drawn_set.add((x, y))
+
+    # 3) 실제 그려진 점 좌표 배열
+    drawn_pts = np.array(list(drawn_set), dtype=np.float32)
+
     all_pts = np.vstack([pts, filled_pts]) if filled_pts.size else pts
+        # --- 추가(선택): 고유 좌표만 카운트 ---
+    uniq_all = np.unique(all_pts.astype(int), axis=0)
+    n_spots  = int(len(uniq_all))
 
     overlap    = has_overlap(all_pts)
     max_clu_sz = cluster_max(all_pts, eps=eps, min_samples=min_samples)

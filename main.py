@@ -101,8 +101,8 @@ def classify(
     uni_thr: float   = Query(0.89, ge=0, le=1),
 
     # BlobDetector
-    min_area: int = Query(50, ge=1),
-    max_area: int = Query(2000, ge=1),
+    min_area: int = Query(130, ge=1),
+    max_area: int = Query(400, ge=1),
     min_threshold: int = Query(100, ge=0),
     max_threshold: int = Query(500, ge=0),
 
