@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import storage
-
+from datetime import datetime, timezone, timedelta
 from analyser import analyse_bgr  # 사용자 보유 코드
 
 # ───────── ENV ─────────
@@ -136,8 +136,9 @@ def classify(
     img_file_id, img_url = upload_png_to_gcs(png_buf)
 
     # 4) Mongo 저장 (overlap, annotated_png 제외)
-    now_utc = datetime.now(timezone.utc)
-    ts_ms   = int(now_utc.timestamp() * 1000)
+    KST = timezone(timedelta(hours=9))
+    now_kst = datetime.now(KST)
+    ts_ms   = int(now_kst.timestamp() * 1000)
 
     # ★ grade 아이디 생성 (count 기반)
     count = mongo_col.count_documents({})
@@ -154,8 +155,8 @@ def classify(
         "n_clusters":   analysed.get("n_clusters"),
         "img_file_id":  img_file_id,
         "img_url":      img_url,
-        "uploadDate":   now_utc,     # 기존 필드
-        "date_time":    now_utc,     # 요청 필드
+        "uploadDate":   now_kst,     # 기존 필드
+        "date_time":    now_kst,     # 요청 필드
         "ts_ms":        ts_ms,       # 정수형 타임스탬프(옵션)
     }
     inserted_id = mongo_col.insert_one(mongo_doc).inserted_id
@@ -170,7 +171,7 @@ def classify(
         "annotated_png":  b64_png,
         "img_url":        img_url,
         "img_file_id":    img_file_id,
-        "date_time":      now_utc.isoformat(),
+        "date_time":      now_kst.isoformat(),
         "ts_ms":          ts_ms,
     })
 
