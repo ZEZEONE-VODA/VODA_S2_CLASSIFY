@@ -145,7 +145,7 @@ def classify(
     mongo_doc_id = f"grade_{count + 1}"
 
     mongo_doc = {
-        "id":           mongo_doc_id,
+        "_id":           mongo_doc_id,
         "label":        analysed.get("label"),
         "max_cluster":  analysed.get("max_cluster"),
         "uniformity":   analysed.get("uniformity"),
@@ -167,7 +167,7 @@ def classify(
 
     analysed_resp = analysed.copy()
     analysed_resp.update({
-        "id":             mongo_doc_id,
+        "_id":             mongo_doc_id,
         "annotated_png":  b64_png,
         "img_url":        img_url,
         "img_file_id":    img_file_id,
