@@ -80,7 +80,6 @@ def upload_png_to_gcs(png_buf: np.ndarray) -> tuple[str, str]:
     return object_name, public_url
 
 # ───────── Health ─────────
-@app.get("/health")
 @app.head("/health")
 def health():
     return {"status": "ok"}
