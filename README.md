@@ -1,47 +1,161 @@
-# Green Dot A/B Classification API
+# 🌟 Green Dot A/B Classification API 🌟
 
-이 프로젝트는 이미지에 포함된 Green Dot의 분포를 분석하여 A/B 등급으로 분류하는 API를 제공합니다.
+[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100.0-green.svg)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-v20.10-blue.svg)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 주요 기능
+---
 
-- 이미지 내 Green Dot 검출 및 위치 분석
-- DBSCAN 클러스터링을 이용한 밀집도 분석
-- 그리드 기반 분포 균일도 분석
-- 분석 결과를 반영한 이미지 시각화 및 저장
-- MongoDB를 이용한 분석 결과 데이터베이스 저장
+## 🎯 프로젝트 개요
 
-## 기술 스택
+이 프로젝트는 이미지에 포함된 **Green Dot의 분포를 분석**하여 **A/B 등급으로 분류**하는 고성능 API를 제공합니다. 이미지 처리, 클러스터링, 통계 분석 등 다양한 기술을 융합하여 객관적인 분류 기준을 제시하고, 분석 결과를 시각화하여 사용자에게 직관적인 인사이트를 제공합니다.
 
-- **Backend:** FastAPI, Python
-- **Database:** MongoDB
-- **Image Processing:** OpenCV, Scikit-learn, Numpy
+## ✨ 주요 기능
 
-## API Endpoints
+- **Green Dot 검출**: `OpenCV`의 `SimpleBlobDetector`를 사용하여 이미지 내 Green Dot을 정밀하게 검출합니다.
+- **밀집도 분석**: `scikit-learn`의 `DBSCAN` 클러스터링 알고리즘을 통해 Green Dot의 밀집도를 분석하고, 최대 클러스터 크기를 측정합니다.
+- **분포 균일도 분석**: 이미지를 그리드로 나누고 각 셀의 Green Dot 분포를 계산하여, `SciPy`의 `entropy` 함수로 분포의 균일도를 측정합니다.
+- **동적 파라미터 제어**: API 호출 시 다양한 분석 파라미터를 동적으로 제어하여, 유연하고 정밀한 분석을 수행할 수 있습니다.
+- **결과 시각화**: 분석 결과를 원본 이미지에 시각적으로 표현(`annotated` 이미지)하여 제공합니다.
+- **데이터베이스 연동**: 분석 결과는 `MongoDB`에 저장되어 데이터 추적 및 관리가 용이합니다.
+- **클라우드 스토리지**: 분석된 이미지는 `Google Cloud Storage(GCS)`에 업로드되어 영구적으로 보관하고, 공개 URL을 통해 접근할 수 있습니다.
+- **CI/CD 자동화**: `GitHub Actions`를 통해 코드 변경 시 자동으로 Docker 이미지를 빌드하고 서버에 배포하는 워크플로우가 구축되어 있습니다.
 
-- `POST /classify`: 이미지 파일을 업로드하여 A/B 분류를 수행합니다.
-  - `return_type=json` (기본값): 분석 결과(JSON)와 Base64로 인코딩된 결과 이미지를 반환합니다.
-  - `return_type=png`: 분석 결과 이미지를 PNG 형식으로 직접 반환합니다.
-- `GET /annot/{fname}`: 저장된 분석 결과 이미지를 반환합니다.
-- `GET /health`: 서버 상태를 확인합니다.
+## 🛠️ 기술 스택
 
-## 시작하기
+| 구분 | 기술 | 버전/설명 |
+| --- | --- | --- |
+| **언어** | Python | 3.11 |
+| **웹 프레임워크** | FastAPI | 고성능 비동기 웹 프레임워크 |
+| **이미지 처리** | OpenCV, scikit-learn, NumPy, SciPy | Green Dot 검출, 클러스터링, 통계 분석 |
+| **데이터베이스** | MongoDB | 분석 결과 저장 |
+| **클라우드** | Google Cloud Storage (GCS) | 분석 이미지 저장 및 제공 |
+| **컨테이너** | Docker | 애플리케이션 패키징 및 배포 |
+| **CI/CD** | GitHub Actions | 자동 빌드 및 배포 |
 
-1.  `.env` 파일을 생성하고 `MONGO_URI` 환경 변수를 설정합니다.
+## 🚀 시작하기
 
+### 1. 환경 설정
+
+프로젝트 루트에 `.env` 파일을 생성하고 다음 환경 변수를 설정합니다.
+
+```env
+# MongoDB 연결 URI
+MONGO_URI="mongodb://<user>:<password>@<host>:<port>/<database>"
+
+# Google Cloud Storage 버킷 정보
+GCS_BUCKET="your-gcs-bucket-name"
+GCS_SUBDIR="grade" # 이미지가 저장될 하위 디렉토리
+
+# Google Cloud 서비스 계정 키 파일 경로
+# (Docker 컨테이너 내부 경로를 가리키도록 설정됨)
+GOOGLE_APPLICATION_CREDENTIALS="/keys/gcp.json"
+```
+
+### 2. 의존성 설치
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. 로컬 서버 실행
+
+```bash
+uvicorn main:app --reload
+```
+
+서버가 실행되면 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) 에서 API 문서를 확인하고 직접 테스트해볼 수 있습니다.
+
+### 4. Docker를 이용한 실행
+
+```bash
+# Docker 이미지 빌드
+docker build -t classifier-api .
+
+# Docker 컨테이너 실행
+docker run -d -p 8100:8000 \
+  --env-file .env \
+  -v /path/to/your/gcp.json:/keys/gcp.json:ro \
+  --name classifier \
+  classifier-api
+```
+
+## 📡 API 엔드포인트
+
+### `POST /classify`
+
+이미지 파일을 업로드하여 Green Dot 분포를 분석하고 A/B 등급을 분류합니다.
+
+- **Request Body**: `multipart/form-data` 형식의 이미지 파일 (`file`)
+- **Query Parameters**:
+    - `return_type`: 응답 형식 (`json` 또는 `png`, 기본값: `json`)
+    - **분류 기준 파라미터**:
+        - `max_clu_thr`: (기본값: 15) 최대 클러스터 크기 임계값. 이 값보다 작아야 'A' 등급.
+        - `uni_thr`: (기본값: 0.89) 분포 균일도 임계값. 이 값보다 커야 'A' 등급.
+    - **상세 분석 파라미터 (조정 가능)**:
+        - `dot_radius`: (기본값: 5) 검출할 점의 반경 (px)
+        - `min_area`, `max_area`: (기본값: 130, 400) 점으로 인식할 최소/최대 면적
+        - `min_threshold`, `max_threshold`: (기본값: 100, 500) Blob 검출을 위한 임계값
+        - `eps`, `min_samples`: (기본값: 30.0, 6) DBSCAN 클러스터링 파라미터
+        - `big_area`: (기본값: 200) 큰 흰색 영역을 채우기 위한 최소 면적 기준
+
+- **Response (`return_type=json`)**:
+    ```json
+    {
+      "label": "A",
+      "overlap": false,
+      "max_cluster": 10,
+      "uniformity": 0.92,
+      "n_spots": 150,
+      "min_nn_dist": 12.5,
+      "nn_cv": 0.15,
+      "n_clusters": 5,
+      "_id": "64c8a... (MongoDB ObjectID)",
+      "annotated_png": "iVBORw0KGgo... (Base64 Encoded Image)",
+      "img_url": "https://storage.googleapis.com/...",
+      "img_file_id": "grade/uuid.png",
+      "date_time": "2023-08-01T12:00:00Z",
+      "ts_ms": 1690891200000
+    }
     ```
-    MONGO_URI=mongodb://...
+- **Response (`return_type=png`)**:
+    - `Content-Type: image/png`
+    - 분석 결과가 시각화된 이미지 파일을 직접 반환합니다.
+
+### `GET /health`
+
+서버의 상태를 확인하는 간단한 엔드포인트입니다.
+
+- **Response**:
+    ```json
+    {
+      "status": "ok"
+    }
     ```
 
-2.  필요한 라이브러리를 설치합니다.
+## 🔬 로컬 테스트
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+`test_greendot.py` 스크립트를 사용하여 로컬 환경에서 이미지 분석을 테스트할 수 있습니다.
 
-3.  FastAPI 개발 서버를 실행합니다.
+```bash
+python test_greendot.py /path/to/your/images -o output_folder --json
+```
 
-    ```bash
-    uvicorn main:app --reload
-    ```
+- `input`: 분석할 이미지 파일 또는 폴더 경로
+- `-o`, `--out`: 결과물이 저장될 폴더 (기본값: `results`)
+- `--json`: 분석 결과를 JSON 파일로 함께 저장
+- 다양한 분석 파라미터를 인자로 전달하여 테스트할 수 있습니다. (예: `--max-clu-thr 20`)
 
-4.  브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) 로 접속하여 API 문서를 확인하고 테스트할 수 있습니다.
+## ⚙️ CI/CD
+
+`.github/workflows/classifier.yml` 에 정의된 GitHub Actions 워크플로우는 `main` 브랜치에 코드가 푸시될 때마다 다음 작업을 자동으로 수행합니다.
+
+1.  Docker Hub에 로그인
+2.  애플리케이션의 Docker 이미지를 빌드
+3.  빌드된 이미지를 Docker Hub에 푸시
+4.  SSH를 통해 배포 서버에 접속하여 최신 이미지를 pull 받고, 기존 컨테이너를 중지/제거한 후 새 버전의 컨테이너를 실행
+
+---
+
+*This README was beautifully generated by Gemini.*
