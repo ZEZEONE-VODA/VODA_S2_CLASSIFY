@@ -140,7 +140,12 @@ def classify(
     now_utc = datetime.now(timezone.utc)
     ts_ms   = int(now_utc.timestamp() * 1000)
 
+    # ★ grade 아이디 생성 (count 기반)
+    count = mongo_col.count_documents({})
+    mongo_doc_id = f"grade_{count + 1}"
+
     mongo_doc = {
+        "id":           mongo_doc_id,
         "label":        analysed.get("label"),
         "max_cluster":  analysed.get("max_cluster"),
         "uniformity":   analysed.get("uniformity"),
@@ -162,7 +167,7 @@ def classify(
 
     analysed_resp = analysed.copy()
     analysed_resp.update({
-        "_id":            str(inserted_id),
+        "id":             mongo_doc_id,
         "annotated_png":  b64_png,
         "img_url":        img_url,
         "img_file_id":    img_file_id,
