@@ -61,12 +61,12 @@ def main():
 
     # ---- 분석 변수들 ----
     ap.add_argument("--max-clu-thr", type=int, default=15)
-    ap.add_argument("--min-area", type=int, default=130)
-    ap.add_argument("--max-area", type=int, default=400)
+    ap.add_argument("--min-area", type=int, default=5)
+    ap.add_argument("--max-area", type=int, default=2000)
     ap.add_argument("--min-th", type=int, default=100, dest="min_threshold")
     ap.add_argument("--max-th", type=int, default=500, dest="max_threshold")
-    ap.add_argument("--eps", type=float, default=30.0)
-    ap.add_argument("--min-samples", type=int, default=6)
+    ap.add_argument("--eps", type=float, default=5.0)
+    ap.add_argument("--min-samples", type=int, default=3)
     ap.add_argument("--uni-thr", type=float, default=0.89)
     ap.add_argument("--big-area", type=int, default=200)
 

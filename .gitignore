@@ -111,3 +111,17 @@ dmypy.json
 # GCP key
 service-account.json
 keys/*.json
+
+# ───── Green-dot 테스트 폴더 및 출력물 무시 ─────
+/test/                  # 입력용 원본 이미지 폴더
+/test/**
+
+/output3/               # 분석 결과 폴더
+/output3/**
+
+/sample/
+/sample/**
+
+*_annotated.png         # 이미지별 주석 파일
+*_result.json           # 이미지별 JSON 결과
+summary.json            # 최종 요약 JSON
