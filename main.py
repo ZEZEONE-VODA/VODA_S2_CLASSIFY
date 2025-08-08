@@ -2,7 +2,7 @@
 /classify
   • return_type=json → JSON + annotated_png(Base64)
   • return_type=png  → image/png
-  • img_url          → GCS에 저장된 annotated 이미지 공개 URL
+  • img_url          → GCS에 저장된 annotated 이미지 공개 URL (라벨별 A/B/UNKNOWN 하위폴더)
   • MongoDB          → annotated_png·overlap 제외하고 저장
   • date_time        → UTC 타임스탬프 (aware datetime)
   • ts_ms            → epoch milliseconds (정렬/쿼리용)
@@ -11,9 +11,10 @@
 import os
 import io
 import base64
+import logging
 from uuid import uuid4
 from datetime import datetime, timezone
-from typing import Tuple
+from typing import Tuple, Optional
 
 import cv2
 import numpy as np
@@ -38,6 +39,9 @@ if not MONGO_URI:
 if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
     raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS 가 설정되지 않았습니다.")
 
+# ───────── Logger ─────────
+logger = logging.getLogger("uvicorn.error")
+
 # ───────── Mongo ─────────
 mongo_col = MongoClient(MONGO_URI)["zezeone"]["results"]
 
@@ -49,7 +53,7 @@ gcs_bucket = gcs_client.bucket(GCS_BUCKET)
 app = FastAPI(
     title="Spot Classifier API (Mongo + GCS)",
     description="하이퍼파라미터 노출, MongoDB 자동 저장, GCS 저장",
-    version="1.3.3",
+    version="1.4.0",
 )
 
 app.add_middleware(
@@ -74,18 +78,35 @@ def _bgr_to_png(img: np.ndarray) -> Tuple[str, np.ndarray]:
         raise RuntimeError("PNG 인코딩 실패")
     return base64.b64encode(buf).decode(), buf  # (b64 str, np.ndarray)
 
-def upload_png_to_gcs(png_buf: np.ndarray) -> tuple[str, str]:
-    object_name = f"{GCS_SUBDIR}/{uuid4()}.png"
+def upload_png_to_gcs(png_buf: np.ndarray, *, label_folder: Optional[str] = None) -> tuple[str, str]:
+    base = GCS_SUBDIR.strip("/")
+    subdir = f"{base}/{label_folder}" if label_folder else base
+    object_name = f"{subdir}/{uuid4()}.png"
     blob = gcs_bucket.blob(object_name)
     blob.upload_from_string(png_buf.tobytes(), content_type="image/png")
     public_url = f"https://storage.googleapis.com/{GCS_BUCKET}/{object_name}"
     return object_name, public_url
 
-# ───────── Health ─────────
+# ───────── Health/Diag ─────────
 @app.head("/health")
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/_diag")
+def diag():
+    try:
+        ping = mongo_col.database.command("ping")
+    except Exception as e:
+        ping = {"ok": 0, "err": str(e)}
+    return {
+        "gcp_project": gcs_client.project,
+        "gcs_bucket": GCS_BUCKET,
+        "gcs_subdir": GCS_SUBDIR,
+        "mongo_db": mongo_col.database.name,
+        "mongo_coll": mongo_col.name,
+        "mongo_ping": ping,
+    }
 
 # ───────── Main Endpoint ─────────
 @app.post(
@@ -118,8 +139,8 @@ def classify(
     # 흰 영역 채우기
     big_area: int = Query(200, ge=1),
 ):
-    uploaded_object_name: str | None = None  # GCS 롤백용
-    inserted_id = None                      # Mongo 롤백용
+    uploaded_object_name: Optional[str] = None  # GCS 롤백용
+    inserted_id = None                           # Mongo 롤백용
 
     try:
         # 1) 분석
@@ -143,15 +164,21 @@ def classify(
         now_utc = datetime.now(timezone.utc)
         ts_ms   = int(now_utc.timestamp() * 1000)
 
-        # 4) GCS 업로드 (성공해야만 이후 단계 진행)
-        img_file_id, img_url = upload_png_to_gcs(png_buf)
-        uploaded_object_name = img_file_id  # 롤백용
+        # 4) 라벨 정규화 → 라벨별(GCS_SUBDIR/A|B|UNKNOWN) 경로에 업로드
+        raw_label = analysed.get("label")
+        label = (str(raw_label).strip().upper() if raw_label is not None else "UNKNOWN")
+        if label not in {"A", "B"}:
+            label = "UNKNOWN"
 
-        # 5) Mongo 저장 (성공해야 최종 확정)
+        img_file_id, img_url = upload_png_to_gcs(png_buf, label_folder=label)
+        uploaded_object_name = img_file_id  # 롤백용
+        logger.info(f"[GCS UPLOAD] project={gcs_client.project} gs://{GCS_BUCKET}/{img_file_id} label={label}")
+
+        # 5) Mongo 저장
         mongo_doc_id = f"grade_{uuid4().hex}"  # 동시성 안전
         mongo_doc = {
             "_id":          mongo_doc_id,
-            "label":        analysed.get("label"),
+            "label":        label,
             "max_cluster":  analysed.get("max_cluster"),
             "uniformity":   analysed.get("uniformity"),
             "n_spots":      analysed.get("n_spots"),
@@ -168,7 +195,6 @@ def classify(
 
         # 6) 응답
         if return_type == "png":
-            # png_buf는 np.ndarray → bytes 변환 필요
             return StreamingResponse(io.BytesIO(png_buf.tobytes()), media_type="image/png")
 
         analysed_resp = analysed.copy()
@@ -183,7 +209,7 @@ def classify(
         return JSONResponse(jsonable_encoder(analysed_resp))
 
     except HTTPException:
-        # FastAPI 예외는 그대로 전달하되, 상태 청소 시도
+        # FastAPI 예외는 그대로 전달하되, 보상 삭제 시도
         if inserted_id is not None:
             try:
                 mongo_col.delete_one({"_id": inserted_id})
@@ -195,7 +221,7 @@ def classify(
             except Exception:
                 pass
         raise
-    except Exception:
+    except Exception as e:
         # 일반 예외 → 롤백 후 500
         if inserted_id is not None:
             try:
@@ -207,4 +233,10 @@ def classify(
                 gcs_bucket.blob(uploaded_object_name).delete()
             except Exception:
                 pass
+        logger.error(f"[INTERNAL ERROR] {e}")
         raise HTTPException(status_code=500, detail="internal error")
+
+# ───────── Local run helper (optional) ─────────
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8100")))
