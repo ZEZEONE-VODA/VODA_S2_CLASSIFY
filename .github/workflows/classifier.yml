@@ -50,7 +50,7 @@ jobs:
             # env 파일 생성 (heredoc 대신 중괄호 블록)
             {
               echo "MONGO_URI=${{ secrets.MONGO_URI }}";
-              echo "GCS_BUCKET=zezeone_images";
+              echo "GCS_BUCKET=zezeone_image";
               echo "GCS_SUBDIR=grade";
               echo "GOOGLE_APPLICATION_CREDENTIALS=/keys/gcp.json";
             } > ~/classifier-data/classifier.env

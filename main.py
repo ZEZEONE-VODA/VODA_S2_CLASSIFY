@@ -235,8 +235,3 @@ def classify(
                 pass
         logger.error(f"[INTERNAL ERROR] {e}")
         raise HTTPException(status_code=500, detail="internal error")
-
-# ───────── Local run helper (optional) ─────────
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8100")))
