@@ -19,7 +19,7 @@ from typing import Tuple, Optional
 import cv2
 import numpy as np
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
@@ -86,6 +86,16 @@ def upload_png_to_gcs(png_buf: np.ndarray, *, label_folder: Optional[str] = None
     blob.upload_from_string(png_buf.tobytes(), content_type="image/png")
     public_url = f"https://storage.googleapis.com/{GCS_BUCKET}/{object_name}"
     return object_name, public_url
+
+def next_seq(key: str = "grade_id") -> int:
+    # zezeone DB 안의 counters 컬렉션 사용
+    doc = mongo_col.database["counters"].find_one_and_update(
+        {"_id": key},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    return int(doc["seq"])
 
 # ───────── Health/Diag ─────────
 @app.head("/health")
@@ -175,7 +185,7 @@ def classify(
         logger.info(f"[GCS UPLOAD] project={gcs_client.project} gs://{GCS_BUCKET}/{img_file_id} label={label}")
 
         # 5) Mongo 저장
-        mongo_doc_id = f"grade_{uuid4().hex}"  # 동시성 안전
+        mongo_doc_id = f"grade_{next_seq('grade_id')}"  # 동시성 안전
         mongo_doc = {
             "_id":          mongo_doc_id,
             "label":        label,

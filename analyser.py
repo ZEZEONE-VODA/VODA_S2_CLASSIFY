@@ -10,7 +10,7 @@ from scipy.stats import entropy
 from scipy.spatial import cKDTree   # 거리 빠른 계산용
 
 # ───────── 공통 상수 ─────────
-DOT_R   = 3                # 시각화·충돌 반경(px)
+DOT_R   = 8                # 시각화·충돌 반경(px)
 MIN_GAP = DOT_R * 2 + 1         # 이 거리 미만이면 겹침으로 간주
 
 # ───────── 1) spot 검출 ─────────

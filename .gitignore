@@ -121,6 +121,9 @@ keys/*.json
 
 /sample/
 /sample/**
+/cv-grade/
+/cv-grade/** */
+
 
 *_annotated.png         # 이미지별 주석 파일
 *_result.json           # 이미지별 JSON 결과
