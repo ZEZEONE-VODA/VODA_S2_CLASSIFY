@@ -25,3 +25,5 @@ setuptools==80.9.0
 urllib3==2.5.0
 wheel==0.45.1
 yarg==0.1.10
+fastapi
+uvicorn[standard]
